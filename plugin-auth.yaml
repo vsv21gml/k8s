@@ -1,0 +1,9 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: custom-auth
+config:
+  auth_host: "keycloak.keycloak"
+  auth_port: 80
+  auth_urlpath: "/realms/master/protocol/openid-connect/userinfo"
+plugin: custom-auth

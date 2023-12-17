@@ -37,7 +37,7 @@ kind: Ingress
 metadata:
   name: node-server
   annotations:
-    konghq.com/plugins: oidc
+    konghq.com/plugins: custom-auth
 spec:
   ingressClassName: kong
   rules:

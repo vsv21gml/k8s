@@ -53,3 +53,7 @@ gateway:
     configMaps:
     - name: oidc
       pluginName: oidc
+    - name: auth1
+      pluginName: auth1
+    - name: custom-auth
+      pluginName: custom-auth
