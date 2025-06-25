@@ -1,0 +1,178 @@
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    expose:
+      - 5432
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  redis:
+    container_name: redis
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis:/data
+
+  opensearch-node1: # This is also the hostname of the container within the Docker network (i.e. https://opensearch-node1/)
+    image: opensearchproject/opensearch:latest # Specifying the latest available image - modify if you want a specific version
+    container_name: opensearch-node1
+    environment:
+      - cluster.name=opensearch-cluster # Name the cluster
+      - node.name=opensearch-node1 # Name the node that will run in this container
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2 # Nodes to look for when discovering the cluster
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2 # Nodes eligible to serve as cluster manager
+      - bootstrap.memory_lock=true # Disable JVM heap memory swapping
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=openSearch1!@#    # Sets the demo admin user password when using demo configuration, required for OpenSearch 2.12 and later
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit)
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536
+        hard: 65536
+    volumes:
+      - opensearch-data1:/usr/share/opensearch/data # Creates volume called opensearch-data1 and mounts it to the container
+    ports:
+      - 9200:9200 # REST API
+      - 9600:9600 # Performance Analyzer
+
+  opensearch-node2:
+    image: opensearchproject/opensearch:latest # This should be the same image used for opensearch-node1 to avoid issues
+    container_name: opensearch-node2
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node2
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=openSearch1!@#
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data2:/usr/share/opensearch/data
+
+  openWebUI:
+    container_name: openwebui
+    image: ghcr.io/open-webui/open-webui:latest
+    # pull_policy: always
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui-local:/app/backend/data
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+
+  langflow:
+    container_name: langflow
+    image: langflowai/langflow:latest
+    # pull_policy: always
+    # platform: linux/amd64
+    ports:
+      - "7860:7860"
+    depends_on:
+      - postgres
+    environment:
+      - LANGFLOW_DATABASE_URL=postgresql://postgres:postgres@postgres:5432/langflow
+      - LANGFLOW_AUTO_LOGIN=true
+    volumes:
+      - langflow:/app/langflow
+
+  litellm:
+    container_name: litellm
+    build:
+      context: .
+      args:
+        target: runtime
+    image: ghcr.io/berriai/litellm:main-stable
+    # pull_policy: always
+    platform: linux/amd64
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/litellm"
+      STORE_MODEL_IN_DB: "True"
+      LITELLM_MASTER_KEY: "chrlghk123#"
+
+  langwatch:
+    container_name: langwatch
+    image: langwatch/langwatch:latest
+    environment:
+      SKIP_ENV_VALIDATION: true
+      DISABLE_PII_REDACTION: true
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/langwatch
+      ELASTICSEARCH_NODE_URL: http://opensearch-node1:9200
+      IS_OPENSEARCH: true
+      REDIS_URL: redis://redis:6379
+      LANGWATCH_NLP_SERVICE: http://langwatch_nlp:5561
+      LANGEVALS_ENDPOINT: http://langevals:5562
+      INSTALL_METHOD: docker
+      NODE_ENV: production
+    env_file:
+      - langwatch/.env
+    # pull_policy: always
+    ports:
+      - "5560:5560"
+    depends_on:
+      - postgres
+      - redis
+      - opensearch-node1
+      - opensearch-node2
+
+  langwatch_nlp:
+    container_name: langwatch_nlp
+    image: langwatch/langwatch_nlp:latest
+    env_file:
+      - langwatch/.env
+    ports:
+      - "5561:5561"
+    restart: always
+    # pull_policy: always
+    environment:
+      - LANGWATCH_ENDPOINT=http://app:5560
+      - STUDIO_RUNTIME=async
+
+  langevals:
+    container_name: langevals
+    image: langwatch/langevals:latest
+    ports:
+      - "5562:5562"
+    restart: always
+    # pull_policy: always
+    environment:
+      - DISABLE_EVALUATORS_PRELOAD=true∂
+
+volumes:
+  open-webui-local:
+    external: true
+  postgres:
+    external: true
+  langflow:
+    external: true
+  redis:
+    external: true
+  opensearch:
+    external: true
+  opensearch-data1:
+    external: true
+  opensearch-data2:
+    external: true
+  
